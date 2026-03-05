@@ -1,0 +1,12 @@
+{
+  "domain": "amb_bellinzona",
+  "name": "AMB Bellinzona Dynamic Tariff",
+  "codeowners": ["https://github.com/Vannian"],
+  "dependencies": [],
+  "documentation": "https://github.com/Vannian/homeassistant_wambo_dynamic_price",
+  "integration_type": "hub",
+  "version": "1.0.0",
+  "iot_class": "cloud_polling",
+  "requirements": [],
+  "issue_tracker": "https://github.com/Vannian/homeassistant_wambo_dynamic_price/issues"
+}
