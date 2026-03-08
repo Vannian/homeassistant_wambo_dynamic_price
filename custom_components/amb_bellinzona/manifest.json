@@ -4,9 +4,10 @@
   "codeowners": ["https://github.com/Vannian"],
   "dependencies": [],
   "documentation": "https://github.com/Vannian/homeassistant_wambo_dynamic_price",
-  "integration_type": "hub",
   "version": "1.0.0",
   "iot_class": "cloud_polling",
   "requirements": [],
-  "issue_tracker": "https://github.com/Vannian/homeassistant_wambo_dynamic_price/issues"
+  "issue_tracker": "https://github.com/Vannian/homeassistant_wambo_dynamic_price/issues",
+  "config_entries": ["config_flow"],
+  "config_flow": true
 }

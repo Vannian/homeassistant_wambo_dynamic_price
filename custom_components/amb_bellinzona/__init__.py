@@ -3,22 +3,26 @@ from __future__ import annotations
 
 import logging
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.typing import ConfigType
+from homeassistant.config_entries import ConfigEntry
 
 from .const import DOMAIN, PLATFORMS
 
 _LOGGER = logging.getLogger(__name__)
 
-async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Set up the AMB Bellinzona component via YAML."""
-    # This check ensures the domain exists in your configuration.yaml
-    if DOMAIN not in config:
-        return True
-
-    # This tells Home Assistant to look for sensor.py and binary_sensor.py
-    for platform in PLATFORMS:
-        hass.async_create_task(
-            hass.helpers.discovery.async_load_platform(platform, DOMAIN, {}, config)
-        )
-
+async def async_setup(hass: HomeAssistant, config: dict) -> bool:
+    """Set up the AMB Bellinzona component via YAML (optional)."""
+    # Modern HA still allows legacy YAML, but we recommend using ConfigEntries
     return True
+
+
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Set up AMB Bellinzona from a config entry."""
+    # Forward setup to all platforms
+    hass.config_entries.async_setup_platforms(entry, PLATFORMS)
+    return True
+
+
+async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Unload a config entry."""
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    return unload_ok
