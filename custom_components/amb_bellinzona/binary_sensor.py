@@ -1,54 +1,155 @@
+from __future__ import annotations
+
 from homeassistant.components.binary_sensor import BinarySensorEntity, BinarySensorDeviceClass
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from datetime import datetime
-from .const import COLOR_ALTA, COLOR_BASSA, DOMAIN
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
+
+from .const import DOMAIN, ATTRIBUTION
+from .coordinator import AmbCHPricesCoordinator
 
 
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
-    async_add_entities,
+    async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up AMB Bellinzona binary sensor from a config entry."""
-    async_add_entities([AMBAltaTariffaSensor(hass)], True)
+    """Set up the binary sensors."""
+    coordinator: AmbCHPricesCoordinator = hass.data[DOMAIN][entry.entry_id]
+
+    periods = coordinator.data.get("periods", [])
+
+    entities = []
+
+    for i, period in enumerate(periods):
+        entities.append(
+            AmbCHPricePeriodBinarySensor(
+                coordinator,
+                period,
+                idx=i,
+                count=len(periods)
+            )
+        )
+
+    # Extra helpful sensors
+    entities.append(CurrentPriceBinarySensor(coordinator))
+    entities.append(NextChangeBinarySensor(coordinator))
+
+    async_add_entities(entities, True)
 
 
-class AMBAltaTariffaSensor(BinarySensorEntity):
-    """Binary sensor that indicates high tariff (red) slots."""
+class AmbCHPricePeriodBinarySensor(CoordinatorEntity, BinarySensorEntity):
+    """Binary sensor for one green/red period."""
 
-    def __init__(self, hass: HomeAssistant) -> None:
-        """Initialize the sensor."""
-        self.hass = hass
+    _attr_has_entity_name = True
+    _attr_attribution = ATTRIBUTION
+    _attr_device_class = BinarySensorDeviceClass.RUNNING  # or None
+
+    def __init__(
+        self,
+        coordinator: AmbCHPricesCoordinator,
+        period: dict,
+        idx: int,
+        count: int,
+    ) -> None:
+        super().__init__(coordinator)
+        self._period = period
+        self._idx = idx
+        self._attr_unique_id = f"{DOMAIN}_period_{idx}"
+        self._attr_name = f"Price Period {idx+1}/{count}"
 
     @property
-    def name(self) -> str:
-        return "AMB Alta Tariffa"
+    def is_on(self) -> bool | None:
+        """True = low price (green)."""
+        return self._period.get("is_low")
 
     @property
-    def unique_id(self) -> str:
-        return "amb_alta_tariffa_binary"
+    def icon(self) -> str | None:
+        return "mdi:leaf" if self.is_on else "mdi:alert"
 
     @property
-    def device_class(self) -> BinarySensorDeviceClass:
-        return BinarySensorDeviceClass.POWER
+    def extra_state_attributes(self) -> dict:
+        p = self._period
+        return {
+            "start": p["start"].isoformat(),
+            "end": p["end"].isoformat(),
+            "color_hex": p["color"],
+            "duration_min": round(p["duration_minutes"]),
+            "fetch_date": self.coordinator.today_str,
+        }
+
+
+class CurrentPriceBinarySensor(CoordinatorEntity, BinarySensorEntity):
+    """Shows if current period is low price."""
+
+    _attr_has_entity_name = True
+    _attr_name = "Current Price Low"
+    _attr_unique_id = f"{DOMAIN}_current_low"
+    _attr_device_class = BinarySensorDeviceClass.RUNNING
+    _attr_attribution = ATTRIBUTION
+
+    def __init__(self, coordinator: AmbCHPricesCoordinator) -> None:
+        super().__init__(coordinator)
+
+    @property
+    def is_on(self) -> bool | None:
+        color = self.coordinator.data.get("current_color")
+        return color == "#05DA3A" if color else None
+
+    @property
+    def icon(self) -> str | None:
+        return "mdi:currency-usd-off" if self.is_on else "mdi:currency-usd"
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        now = datetime.now().astimezone()
+        return {
+            "current_color": self.coordinator.data.get("current_color"),
+            "as_of": now.isoformat(),
+        }
+
+
+class NextChangeBinarySensor(CoordinatorEntity, BinarySensorEntity):
+    """Next time the price color changes."""
+
+    _attr_has_entity_name = True
+    _attr_name = "Next Price Change"
+    _attr_unique_id = f"{DOMAIN}_next_change"
+    _attr_device_class = None
+    _attr_attribution = ATTRIBUTION
+
+    def __init__(self, coordinator: AmbCHPricesCoordinator) -> None:
+        super().__init__(coordinator)
 
     @property
     def is_on(self) -> bool:
-        """Calculate if we are currently in a Red (High) slot."""
-        # Get data from the main data sensor
-        state = self.hass.states.get("sensor.amb_dynamic_data")
-        if not state or "bgColors" not in state.attributes:
-            return False
+        return False  # informational only
 
-        colors = state.attributes["bgColors"]
-        if not colors:
-            return False
+    @property
+    def icon(self) -> str:
+        return "mdi:clock-fast"
 
-        # Calculate index (0-95) for the current 15-minute slot
-        now = datetime.now()
-        index = (now.hour * 4) + (now.minute // 15)
+    @property
+    def extra_state_attributes(self) -> dict:
+        periods = self.coordinator.data.get("periods", [])
+        now = datetime.now().astimezone()
 
-        if index < len(colors):
-            return colors[index] == COLOR_ALTA
-        return False
+        next_change = None
+        next_is_low = None
+
+        for p in periods:
+            if p["start"] <= now < p["end"]:
+                next_change = p["end"]
+                next_is_low = not p["is_low"]  # opposite of current
+                break
+            if p["start"] > now:
+                next_change = p["start"]
+                next_is_low = p["is_low"]
+                break
+
+        attr = {
+            "next_change_time": next_change.isoformat() if next_change else None,
+            "next_is_low_price": next_is_low,
+        }
+        return attr
