@@ -1,9 +1,10 @@
 {
   "name": "AMB Bellinzona Dynamic Tariff",
   "content_in_root": false,
-  "zip_release": false,
   "render_readme": true,
+  "zip_release": true,
+  "domains": ["binary_sensor"],
+  "iot_class": "cloud_polling",
   "country": "CH",
-  "domains": ["amb_bellinzona"]
+  "homeassistant": "2024.6.0"
 }
-
